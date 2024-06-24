@@ -27,33 +27,14 @@ if (app.Environment.IsDevelopment())
 
 app.MapGet("/greetings", () =>
     {
-        var scope = rootContainer.BeginLifetimeScope(b =>
-        {
-            var serviceCollection = new ServiceCollection();
-            serviceCollection
-                .AddGrpcClient<Greeter.GreeterClient>("Greeter", options => options.Address = new Uri("dns:///localhost:5159"))
-                .ConfigureChannel(options =>
-                {
-                    options.Credentials = ChannelCredentials.Insecure;
-                    options.ServiceConfig = new ServiceConfig
-                    {
-                        LoadBalancingConfigs = { new RoundRobinConfig() }
-                    };
-                });
-            b.Populate(serviceCollection);
-        });
+        var serviceProvider = RegisterGrpcClient("Greeter");
         
-        var serviceProvider = new AutofacServiceProvider(scope);
-
         var grpcClientFactory = serviceProvider.GetRequiredService<GrpcClientFactory>();
         var grpcClient = grpcClientFactory.CreateClient<Greeter.GreeterClient>("Greeter");
 
         var reply = grpcClient.SayHello(new HelloRequest { Name = "Neo" });
 
         serviceProvider.Dispose();
-        scope.Dispose();
-        rootContainer.Dispose();
-        
         return reply.Message;
     })
     .WithName("GetGreetings")
@@ -61,14 +42,38 @@ app.MapGet("/greetings", () =>
 
 app.MapPut("/{endpoint}", (string endpoint) =>
     {
-        using var scope = scopeFactory.CreateScope();
-        var grpcClientFactory = scope.ServiceProvider.GetRequiredService<GrpcClientFactory>();
+        var serviceProvider = RegisterGrpcClient(endpoint);
+        
+        var grpcClientFactory = serviceProvider.GetRequiredService<GrpcClientFactory>();
         var grpcClient = grpcClientFactory.CreateClient<Greeter.GreeterClient>(endpoint);
 
         var reply = grpcClient.SayHello(new HelloRequest { Name = "Neo" });
+
+        serviceProvider.Dispose();
         return reply.Message;
     })
     .WithName("NewEndpoint")
     .WithOpenApi();
 
 app.Run();
+
+AutofacServiceProvider RegisterGrpcClient(string name)
+{
+    var scope = rootContainer.BeginLifetimeScope(b =>
+    {
+        var serviceCollection = new ServiceCollection();
+        serviceCollection
+            .AddGrpcClient<Greeter.GreeterClient>(name, options => options.Address = new Uri("dns:///localhost:5159"))
+            .ConfigureChannel(options =>
+            {
+                options.Credentials = ChannelCredentials.Insecure;
+                options.ServiceConfig = new ServiceConfig
+                {
+                    LoadBalancingConfigs = { new RoundRobinConfig() }
+                };
+            });
+        b.Populate(serviceCollection);
+    });
+    
+    return new AutofacServiceProvider(scope);
+}
