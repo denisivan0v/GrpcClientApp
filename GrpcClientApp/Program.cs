@@ -41,4 +41,16 @@ app.MapGet("/greetings", () =>
     .WithName("GetGreetings")
     .WithOpenApi();
 
+app.MapPut("/{endpoint}", (string endpoint) =>
+    {
+        using var scope = scopeFactory.CreateScope();
+        var grpcClientFactory = scope.ServiceProvider.GetRequiredService<GrpcClientFactory>();
+        var grpcClient = grpcClientFactory.CreateClient<Greeter.GreeterClient>(endpoint);
+
+        var reply = grpcClient.SayHello(new HelloRequest { Name = "Neo" });
+        return reply.Message;
+    })
+    .WithName("NewEndpoint")
+    .WithOpenApi();
+
 app.Run();
